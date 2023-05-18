@@ -1,0 +1,133 @@
+// list the file details of file descriptors used by a pid
+
+ ls -l /proc/2958/fd/*
+
+find the descriptors of /dev/ttyS
+
+trace only cretain files
+
+# strace -e trace=open,close,read,write -y -p 1470 2>&1 | grep "/dev/TTY"
+
+# this will output anthing where the file has '/dev/' in its path
+strace -p 1470 -Tfe trace=open,read,write -y 2>&1 | grep '/dev/'
+
+# here is a pyton script that works
+
+import subprocess
+import re
+import sys
+
+def monitor_process_output(pid, grep_pattern):
+    process = subprocess.Popen(['strace', '-p', str(pid), '-s', '4096','-Tf', '-e', 'trace=open,read,write', '-y'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    while True:
+        line = process.stdout.readline().strip()
+        if not line:
+            break
+        if re.search(grep_pattern, line):
+            print(line)
+
+    process.wait()
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print('Usage: python script.py <PID> <grep_pattern>')
+        sys.exit(1)
+
+    pid = int(sys.argv[1])
+    grep_pattern = sys.argv[2]
+
+    monitor_process_output(pid, grep_pattern)
+
+# heres a version with hex and ascii
+
+import subprocess
+import re
+import sys
+
+def format_hex_ascii_line(line):
+    match = re.search(r'(?P<prefix>.*)(".*?")(?P<suffix>.*)', line)
+    if match:
+        prefix = match.group('prefix')
+        suffix = match.group('suffix')
+        hex_values = re.findall(r'\\x([0-9a-fA-F]{2})', match.group(2))
+        ascii_values = [chr(int(h, 16)) if 32 <= int(h, 16) <= 126 else '.' for h in hex_values]
+        formatted_hex = ' '.join(hex_values)
+        formatted_ascii = ''.join(ascii_values)
+        formatted_line = '{}"{}"{}'.format(prefix, formatted_hex, suffix)
+        #print(formatted_line)
+        print('{}   {}'.format(formatted_hex, formatted_ascii))
+
+def monitor_process_output(pid, grep_pattern):
+    process = subprocess.Popen(['strace', '-p', str(pid), '-s', '4096','-Tf', '-x', '-e', 'trace=open,read,write', '-y'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    while True:
+        line = process.stdout.readline().strip()
+        if not line:
+            break
+        if re.search(grep_pattern, line):
+            print(line + '\n\n')
+            format_hex_ascii_line(line)
+
+    process.wait()
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print('Usage: python script.py <PID> <grep_pattern>')
+        sys.exit(1)
+
+    pid = int(sys.argv[1])
+    grep_pattern = sys.argv[2]
+
+    monitor_process_output(pid, grep_pattern)
+
+
+# monitor all processes for text
+
+
+!/bin/bash
+
+# Get the list of process IDs
+pids=$(pgrep -f "")
+
+# Start strace on all processes
+for pid in $pids; do
+  echo "Tracing PID: $pid"
+  strace -e trace=open,read,write -p "$pid" 2>&1 | grep '/dev/' > "$pid_strace_output.txt" &
+done
+
+# Wait for a key press
+read -n 1 -s -r -p "Press any key to stop strace..."
+
+# Kill the strace processes
+pkill -f "strace -e trace=open,read,write"
+
+# Exit the script
+exit
+
+# monitor eftd for serial read and writes
+ strace -e trace=open,close,read,write -y -f -p 792 2>&1 | grep '/dev/ttyS1'
+
+# working monitors all processes for /dev/ttyS1
+!/bin/bash
+
+# Get the list of process IDs
+pids=$(pgrep -f "")
+
+# Start strace on all processes
+for pid in $pids; do
+  echo "Tracing PID: $pid"
+  strace -e trace=open,read,write -y -f -p "$pid" 2>&1 | grep '/dev/ttyS1' > "$pid-strace_output_$pid.txt" &
+done
+
+# Wait for a key press
+read -n 1 -s -r -p "Press any key to stop strace..."
+
+# Kill the strace processes
+pkill -f "strace -e trace=open,read,write"
+
+# Exit the script
+exit
+
+
+
